@@ -16,99 +16,37 @@ st.set_page_config(page_title="NTA Accommodations Dashboard", layout="wide")
 st.title("📊 NTA Accommodations Dashboard")
 
 # =============================
-# KPI Summary
+# Sidebar Navigation
 # =============================
-st.markdown("### 📌 Key Metrics")
-col1, col2, col3, col4 = st.columns(4)
-
-total_requests = len(df)
-approval_rate = (df['Approved?'].eq('Appv.').mean() * 100).round(1)
-most_common_diagnosis = df['Diagnosis'].mode()[0] if df['Diagnosis'].notna().any() else "N/A"
-top_request_type = df['Request_Type'].mode()[0] if df['Request_Type'].notna().any() else "N/A"
-
-col1.metric("Total Requests", f"{total_requests:,}")
-col2.metric("Approval Rate", f"{approval_rate}%")
-col3.metric("Most Common Diagnosis", most_common_diagnosis)
-col4.metric("Top Request Type", top_request_type)
-
-# =============================
-# Sidebar Filters
-# =============================
-st.sidebar.header("🔍 Filters")
-
-law_schools = st.sidebar.multiselect(
-    "Select Law Schools",
-    options=df['Law_School'].dropna().unique(),
-    default=df['Law_School'].dropna().unique()
-)
-
-request_types = st.sidebar.multiselect(
-    "Select Request Types",
-    options=df['Request_Type'].dropna().unique(),
-    default=df['Request_Type'].dropna().unique()
-)
-
-approval_status = st.sidebar.multiselect(
-    "Select Approval Status",
-    options=df['Approved?'].dropna().unique(),
-    default=df['Approved?'].dropna().unique()
-)
-
-# Apply filters globally
-df = df[df['Law_School'].isin(law_schools)]
-df = df[df['Request_Type'].isin(request_types)]
-df = df[df['Approved?'].isin(approval_status)]
+st.sidebar.title("Chart Navigation")
+chart_options = [
+    "Request Types",
+    "Extended Time by Law School",
+    "Extended Time Distribution",
+    "Top Diagnoses",
+    "Requests by Law School",
+    "Approval by Request Type",
+    "Approval Distribution",
+    "Extended Time Distribution by Law School",
+    "Extended Time vs Approval",
+    "Correlations with Extended Time",
+    "Correlation Matrix"
+]
+selected_chart = st.sidebar.selectbox("Select a Chart", chart_options)
 
 # =============================
-# Navigation
+# Chart Display Functions
 # =============================
-section = st.sidebar.radio(
-    "📍 Navigate Dashboard",
-    ["Overview", "Extended Time Analysis", "Diagnoses"]
-)
-
-# =============================
-# Section 1: Overview
-# =============================
-if section == "Overview":
-    st.header("📍 Overview")
-
-    # Request Types
+def plot_request_types():
     request_type_counts = df['Request_Type'].value_counts()
-    fig1 = px.pie(values=request_type_counts.values, names=request_type_counts.index,
-                  title='Distribution of Request Types')
-    st.plotly_chart(fig1, use_container_width=True)
+    fig = px.pie(values=request_type_counts.values, 
+                 names=request_type_counts.index,
+                 title='Distribution of Request Types',
+                 color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c'])
+    fig.update_layout(height=400, width=500, legend_title_text='Request Type')
+    st.plotly_chart(fig, use_container_width=True)
 
-    # Requests by Law School
-    law_school_counts = df['Law_School'].value_counts()
-    fig2 = px.bar(y=law_school_counts.index, x=law_school_counts.values, orientation='h',
-                  title='Accommodation Requests by Law School',
-                  labels={'x': 'Number of Requests', 'y': 'Law School'},
-                  color=law_school_counts.values, color_continuous_scale='Blues')
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # Approval Distribution
-    approval_counts = df['Approved?'].value_counts()
-    fig3 = px.bar(x=approval_counts.index, y=approval_counts.values,
-                  title='Approval Status Distribution',
-                  labels={'x': 'Approval Status', 'y': 'Count'},
-                  color=approval_counts.values, color_continuous_scale='Blues')
-    st.plotly_chart(fig3, use_container_width=True)
-
-    # Approval by Request Type
-    approval_by_request = pd.crosstab(df['Request_Type'], df['Approved?'], normalize='index') * 100
-    fig4 = px.bar(approval_by_request, x=approval_by_request.index,
-                  y=['Appv.', 'Appv. Part', 'Prev. Exam'],
-                  title='Approval Status by Request Type (%)',
-                  barmode='stack')
-    st.plotly_chart(fig4, use_container_width=True)
-
-# =============================
-# Section 2: Extended Time Analysis
-# =============================
-elif section == "Extended Time Analysis":
-    st.header("⏳ Extended Time Analysis")
-
+def plot_extended_time_by_law_school():
     def extract_extended_time(accommodations):
         if pd.isna(accommodations):
             return None
@@ -116,46 +54,260 @@ elif section == "Extended Time Analysis":
         if match:
             return int(match.group(1))
         return None
-
+    
     df['Extended_Time_Percent'] = df['Requested_Accommodations'].apply(extract_extended_time)
     df_with_extended_time = df[df['Extended_Time_Percent'].notna()].copy()
-
-    # Extended Time Distribution
-    extended_time_counts = df['Extended_Time_Percent'].value_counts().sort_index()
-    fig5 = px.bar(x=extended_time_counts.index, y=extended_time_counts.values,
-                  title='Distribution of Extended Time Requests',
-                  labels={'x': 'Extended Time %', 'y': 'Requests'},
-                  color=extended_time_counts.values, color_continuous_scale='Viridis')
-    st.plotly_chart(fig5, use_container_width=True)
-
-    # Extended Time by Law School
+    
     law_school_analysis = df_with_extended_time.groupby('Law_School').agg({
-        'Extended_Time_Percent': ['mean', 'median'],
-        'Approved?': lambda x: (x == 'Appv.').sum() / len(x) * 100
-    }).round(2).reset_index()
-    law_school_analysis.columns = ['Law_School', 'Avg_Extended_Time', 'Median_Extended_Time', 'Approval_Rate']
+        'Extended_Time_Percent': ['mean', 'median', 'std', 'count'],
+        'Approved?': lambda x: (x == 'Appv.').sum() / len(x) * 100  
+    }).round(2)
+    
+    law_school_analysis.columns = ['Avg_Extended_Time', 'Median_Extended_Time', 'Std_Extended_Time', 'Request_Count', 'Approval_Rate']
+    law_school_analysis = law_school_analysis.reset_index()
+    law_school_analysis = law_school_analysis.sort_values('Avg_Extended_Time', ascending=False)
+    
+    fig = px.bar(law_school_analysis, 
+                 x='Law_School', 
+                 y='Avg_Extended_Time',
+                 title='Average Extended Time Requests by Law School',
+                 labels={'Avg_Extended_Time': 'Average Extended Time (%)', 'Law_School': 'Law School'},
+                 color='Avg_Extended_Time',
+                 color_continuous_scale='Viridis',
+                 text='Avg_Extended_Time')
+    
+    fig.update_layout(height=500, width=800, xaxis_tickangle=-45)
+    fig.update_traces(texttemplate='%{text}%', textposition='outside')
+    st.plotly_chart(fig, use_container_width=True)
 
-    fig6 = px.bar(law_school_analysis, x='Law_School', y='Avg_Extended_Time',
-                  title='Average Extended Time Requests by Law School',
-                  color='Avg_Extended_Time', text='Avg_Extended_Time',
-                  color_continuous_scale='Viridis')
-    fig6.update_traces(texttemplate='%{text}%', textposition='outside')
-    st.plotly_chart(fig6, use_container_width=True)
+def plot_extended_time_distribution():
+    def extract_extended_time(accommodations):
+        if pd.isna(accommodations):
+            return None
+        match = re.search(r'(\d+)%\s+Extended Time', str(accommodations))
+        if match:
+            return int(match.group(1))
+        return None
+    
+    df['Extended_Time_Percent'] = df['Requested_Accommodations'].apply(extract_extended_time)
+    extended_time_counts = df['Extended_Time_Percent'].value_counts().sort_index()
+    
+    fig = px.bar(x=extended_time_counts.index, 
+                 y=extended_time_counts.values,
+                 title='Distribution of Extended Time Requests',
+                 labels={'x': 'Extended Time Percentage', 'y': 'Number of Requests'},
+                 color=extended_time_counts.values,
+                 color_continuous_scale='Viridis')
+    
+    fig.update_layout(height=400, width=600, coloraxis_colorbar_title="No. of Requests")
+    st.plotly_chart(fig, use_container_width=True)
 
-    # Extended Time vs Approval
+def plot_top_diagnoses():
+    def extract_diagnoses(diagnosis_text):
+        if pd.isna(diagnosis_text):
+            return []
+        diagnoses = [d.strip() for d in str(diagnosis_text).split(',')]
+        return diagnoses
+    
+    all_diagnoses = []
+    for diagnosis in df['Diagnosis']:
+        all_diagnoses.extend(extract_diagnoses(diagnosis))
+    
+    diagnosis_counts = pd.Series(all_diagnoses).value_counts().head(10)
+    
+    fig = px.bar(y=diagnosis_counts.index, 
+                 x=diagnosis_counts.values,
+                 orientation='h',
+                 title='Top 10 Most Common Diagnoses',
+                 labels={'x': 'Number of Cases', 'y': 'Diagnosis'},
+                 color=diagnosis_counts.values,
+                 color_continuous_scale='Reds')
+    
+    fig.update_layout(height=500, width=600, coloraxis_colorbar_title="No. of Cases")
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_requests_by_law_school():
+    law_school_counts = df['Law_School'].value_counts()
+    fig = px.bar(y=law_school_counts.index, 
+                 x=law_school_counts.values,
+                 orientation='h',
+                 title='Accommodation Requests by Law School',
+                 labels={'x': 'Number of Requests', 'y': 'Law School'},
+                 color=law_school_counts.values,
+                 color_continuous_scale='Blues')
+    
+    fig.update_layout(height=400, width=700, coloraxis_colorbar_title="No. of Requests")
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_approval_by_request_type():
+    approval_by_request = pd.crosstab(df['Request_Type'], df['Approved?'], normalize='index') * 100
+    fig = px.bar(approval_by_request, 
+                 x=approval_by_request.index,
+                 y=['Appv.', 'Appv. Part', 'Prev. Exam'],
+                 title='Approval Status by Request Type (%)',
+                 labels={'x': 'Request Type', 'value': 'Percentage'},
+                 color_discrete_sequence=['#2ecc71', '#f39c12', '#3498db'])
+    
+    fig.update_layout(height=400, width=600, barmode='stack', legend_title_text='Approval Status')
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_approval_distribution():
+    approval_counts = df['Approved?'].value_counts()
+    fig = px.bar(x=approval_counts.index, 
+                 y=approval_counts.values,
+                 title='Approval Status Distribution',
+                 labels={'x': 'Approval Status', 'y': 'Count'},
+                 color=approval_counts.values,
+                 color_continuous_scale='Blues')
+    
+    fig.update_layout(height=400, width=500, coloraxis_colorbar_title="Approval Count")
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_extended_time_distribution_by_law_school():
+    def extract_extended_time(accommodations):
+        if pd.isna(accommodations):
+            return None
+        match = re.search(r'(\d+)%\s+Extended Time', str(accommodations))
+        if match:
+            return int(match.group(1))
+        return None
+    
+    df['Extended_Time_Percent'] = df['Requested_Accommodations'].apply(extract_extended_time)
+    df_with_extended_time = df[df['Extended_Time_Percent'].notna()].copy()
+    
+    extended_time_pivot = df_with_extended_time.pivot_table(
+        index='Law_School', 
+        columns='Extended_Time_Percent', 
+        values='File_Name', 
+        aggfunc='count', 
+        fill_value=0
+    )
+    
+    extended_time_pct = extended_time_pivot.div(extended_time_pivot.sum(axis=1), axis=0) * 100
+    
+    fig = go.Figure()
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+    extended_time_values = [25, 50, 100] 
+    
+    for i, time_pct in enumerate(extended_time_values):
+        if time_pct in extended_time_pct.columns:
+            fig.add_trace(go.Bar(
+                name=f'{time_pct}% Extended Time',
+                x=extended_time_pct.index,
+                y=extended_time_pct[time_pct],
+                marker_color=colors[i % len(colors)]
+            ))
+    
+    fig.update_layout(
+        title='Distribution of Extended Time Requests by Law School (%)',
+        xaxis_title='Law School',
+        yaxis_title='Percentage of Requests',
+        barmode='stack',
+        legend_title_text='Extended Time %',
+        height=500,
+        width=800,
+        xaxis_tickangle=-45
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_extended_time_vs_approval():
+    def extract_extended_time(accommodations):
+        if pd.isna(accommodations):
+            return None
+        match = re.search(r'(\d+)%\s+Extended Time', str(accommodations))
+        if match:
+            return int(match.group(1))
+        return None
+    
+    df['Extended_Time_Percent'] = df['Requested_Accommodations'].apply(extract_extended_time)
+    df_with_extended_time = df[df['Extended_Time_Percent'].notna()].copy()
+    
     law_school_stats = df_with_extended_time.groupby('Law_School').agg({
         'Extended_Time_Percent': 'mean',
-        'Approved?': lambda x: (x.isin(['Appv.', 'Appv. Part'])).sum() / len(x) * 100,
-        'File_Name': 'count'
-    }).round(2).reset_index()
-    law_school_stats.columns = ['Law_School', 'Avg_Extended_Time', 'Approval_Rate', 'Request_Count']
+        'Approved?': lambda x: (x.isin(['Appv.', 'Appv. Part'])).sum() / len(x) * 100,  
+        'File_Name': 'count' 
+    }).round(2)
+    
+    law_school_stats.columns = ['Avg_Extended_Time', 'Approval_Rate', 'Request_Count']
+    law_school_stats = law_school_stats.reset_index()
+    
+    fig = px.scatter(law_school_stats, 
+                    x='Avg_Extended_Time', 
+                    y='Approval_Rate',
+                    size='Request_Count',
+                    color='Law_School',
+                    hover_data=['Law_School', 'Avg_Extended_Time', 'Approval_Rate', 'Request_Count'],
+                    title='Extended Time vs Approval Rate by Law School',
+                    labels={
+                        'Avg_Extended_Time': 'Average Extended Time (%)',
+                        'Approval_Rate': 'Approval Rate (%)',
+                        'Request_Count': 'Number of Requests'
+                    })
+    
+    fig.update_layout(height=500, width=700)
+    fig.update_traces(marker=dict(sizeref=2.*max(law_school_stats['Request_Count'])/(40.**2), sizemode='area'))
+    fig.update_traces(mode='markers+text', textposition='top center')
+    st.plotly_chart(fig, use_container_width=True)
 
-    fig7 = px.scatter(law_school_stats, x='Avg_Extended_Time', y='Approval_Rate',
-                      size='Request_Count', color='Law_School',
-                      title='Extended Time vs Approval Rate by Law School')
-    st.plotly_chart(fig7, use_container_width=True)
+def plot_correlations_with_extended_time():
+    def extract_extended_time(accommodations):
+        if pd.isna(accommodations):
+            return 0
+        match = re.search(r'(\d+)%\s+Extended Time', str(accommodations))
+        if match:
+            return int(match.group(1))
+        return 0
 
-    # Correlation Matrix
+    def extract_sequential_number(ncbe):
+        if pd.isna(ncbe):
+            return 0
+        num_match = re.search(r'N(\d+)', str(ncbe))
+        if num_match:
+            return int(num_match.group(1))
+        return 0
+    
+    def count_accommodations(accommodations):
+        if pd.isna(accommodations):
+            return 0
+        return len(str(accommodations).split(','))
+
+    df['Extended_Time_Numeric'] = df['Requested_Accommodations'].apply(extract_extended_time)
+    df['NCBE_Sequence'] = df['NCBE'].apply(extract_sequential_number)
+    df['Num_Accommodations'] = df['Requested_Accommodations'].apply(count_accommodations)
+    
+    df['Is_Fully_Approved'] = (df['Approved?'] == 'Appv.').astype(int)
+    df['Is_Partially_Approved'] = (df['Approved?'] == 'Appv. Part').astype(int)
+    df['Is_Previously_Examined'] = (df['Approved?'] == 'Prev. Exam').astype(int)
+    df['Is_New_Request'] = (df['Request_Type'] == 'New Request').astype(int)
+    df['Is_Retake_Same'] = (df['Request_Type'] == 'Retake - Same Request').astype(int)
+    df['Is_Retake_Changed'] = (df['Request_Type'] == 'Retake - Changed Request').astype(int)
+    
+    extended_time_correlations = df[['Extended_Time_Numeric', 'Num_Accommodations', 'NCBE_Sequence',
+                                    'Is_Fully_Approved', 'Is_Partially_Approved', 'Is_Previously_Examined',
+                                    'Is_New_Request', 'Is_Retake_Same', 'Is_Retake_Changed']].corr()['Extended_Time_Numeric'].drop('Extended_Time_Numeric')
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=extended_time_correlations.index,
+        y=extended_time_correlations.values,
+        marker_color=['red' if x < 0 else 'blue' for x in extended_time_correlations.values],
+        text=[f'{x:.3f}' for x in extended_time_correlations.values],
+        textposition='auto'
+    ))
+    
+    fig.update_layout(
+        title='Correlations with Extended Time Percentage',
+        xaxis_title='Variables',
+        yaxis_title='Correlation Coefficient',
+        height=500,
+        width=800,
+        xaxis_tickangle=-45
+    )
+    
+    fig.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_correlation_matrix():
     df_clean = df.copy()
     df_clean['Extended_Time'] = df_clean['Requested_Accommodations'].str.contains('Extended Time', na=False).astype(int)
     df_clean['Laptop'] = df_clean['Requested_Accommodations'].str.contains('Laptop', na=False).astype(int)
@@ -172,35 +324,50 @@ elif section == "Extended Time Analysis":
     df_clean['Retake_Request'] = df_clean['Request_Type'].str.contains('Retake', na=False).astype(int)
     df_clean['Approved'] = df_clean['Approved?'].str.contains('Appv', na=False).astype(int)
 
-    correlation_columns = ['Extended_Time', 'Laptop', 'Reduced_Distraction', 'OTC_Breaks',
-                          'Large_Print', 'Medication', 'ADHD', 'Anxiety', 'Depression',
+    correlation_columns = ['Extended_Time', 'Laptop', 'Reduced_Distraction', 'OTC_Breaks', 
+                          'Large_Print', 'Medication', 'ADHD', 'Anxiety', 'Depression', 
                           'Physical_Condition', 'Retake_Request', 'Approved']
-    corr_matrix = df_clean[correlation_columns].corr()
 
-    fig8 = px.imshow(corr_matrix, text_auto=True, aspect="auto",
-                     color_continuous_scale='RdBu',
-                     title='Correlation Heatmap of Accommodations, Diagnoses, Request Type, and Approval')
-    st.plotly_chart(fig8, use_container_width=True)
+    correlation_matrix = df_clean[correlation_columns].corr()
+
+    fig = px.imshow(correlation_matrix,
+                    text_auto=True,  
+                    aspect="auto", 
+                    color_continuous_scale='RdBu',
+                    title='Correlation Heatmap of Accommodations, Diagnoses, Request Type, and Approval')
+
+    fig.update_layout(
+        xaxis_title="Variables",
+        yaxis_title="Variables",
+        coloraxis_colorbar_title="Correlation",
+        height=800, 
+        width=1000, 
+        margin=dict(l=50, r=50, t=100, b=50) 
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 # =============================
-# Section 3: Diagnoses
+# Display Selected Chart
 # =============================
-elif section == "Diagnoses":
-    st.header("🧠 Diagnoses Insights")
-
-    def extract_diagnoses(diagnosis_text):
-        if pd.isna(diagnosis_text):
-            return []
-        return [d.strip() for d in str(diagnosis_text).split(',')]
-
-    all_diagnoses = []
-    for diagnosis in df['Diagnosis']:
-        all_diagnoses.extend(extract_diagnoses(diagnosis))
-
-    diagnosis_counts = pd.Series(all_diagnoses).value_counts().head(10)
-    fig9 = px.bar(y=diagnosis_counts.index, x=diagnosis_counts.values, orientation='h',
-                  title='Top 10 Most Common Diagnoses',
-                  labels={'x': 'Number of Cases', 'y': 'Diagnosis'},
-                  color=diagnosis_counts.values, color_continuous_scale='Reds')
-    fig9.update_layout(height=600) 
-    st.plotly_chart(fig9, use_container_width=True)
+if selected_chart == "Request Types":
+    plot_request_types()
+elif selected_chart == "Extended Time by Law School":
+    plot_extended_time_by_law_school()
+elif selected_chart == "Extended Time Distribution":
+    plot_extended_time_distribution()
+elif selected_chart == "Top Diagnoses":
+    plot_top_diagnoses()
+elif selected_chart == "Requests by Law School":
+    plot_requests_by_law_school()
+elif selected_chart == "Approval by Request Type":
+    plot_approval_by_request_type()
+elif selected_chart == "Approval Distribution":
+    plot_approval_distribution()
+elif selected_chart == "Extended Time Distribution by Law School":
+    plot_extended_time_distribution_by_law_school()
+elif selected_chart == "Extended Time vs Approval":
+    plot_extended_time_vs_approval()
+elif selected_chart == "Correlations with Extended Time":
+    plot_correlations_with_extended_time()
+elif selected_chart == "Correlation Matrix":
+    plot_correlation_matrix()
