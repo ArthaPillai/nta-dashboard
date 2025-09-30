@@ -207,12 +207,12 @@ with tabs[8]:
 # 10. Correlations with Extended Time
 with tabs[9]:
     def extract_extended_time(accommodations):
-    if pd.isna(accommodations):
+        if pd.isna(accommodations):
+            return 0
+        match = re.search(r'(\d+)%\s+Extended Time', str(accommodations))
+        if match:
+            return int(match.group(1))
         return 0
-    match = re.search(r'(\d+)%\s+Extended Time', str(accommodations))
-    if match:
-        return int(match.group(1))
-    return 0
 
     def extract_sequential_number(ncbe):
         if pd.isna(ncbe):
