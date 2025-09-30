@@ -206,10 +206,42 @@ with tabs[8]:
 
 # 10. Correlations with Extended Time
 with tabs[9]:
+    def extract_extended_time(accommodations):
+    if pd.isna(accommodations):
+        return 0
+    match = re.search(r'(\d+)%\s+Extended Time', str(accommodations))
+    if match:
+        return int(match.group(1))
+    return 0
+
+    def extract_sequential_number(ncbe):
+        if pd.isna(ncbe):
+            return 0
+        num_match = re.search(r'N(\d+)', str(ncbe))
+        if num_match:
+            return int(num_match.group(1))
+        return 0
+    
+    def count_accommodations(accommodations):
+        if pd.isna(accommodations):
+            return 0
+        return len(str(accommodations).split(','))
+
+    df['Extended_Time_Numeric'] = df['Requested_Accommodations'].apply(extract_extended_time)
+    df['NCBE_Sequence'] = df['NCBE'].apply(extract_sequential_number)
+    df['Num_Accommodations'] = df['Requested_Accommodations'].apply(count_accommodations)
+    
+    df['Is_Fully_Approved'] = (df['Approved?'] == 'Appv.').astype(int)
+    df['Is_Partially_Approved'] = (df['Approved?'] == 'Appv. Part').astype(int)
+    df['Is_Previously_Examined'] = (df['Approved?'] == 'Prev. Exam').astype(int)
+    df['Is_New_Request'] = (df['Request_Type'] == 'New Request').astype(int)
+    df['Is_Retake_Same'] = (df['Request_Type'] == 'Retake - Same Request').astype(int)
+    df['Is_Retake_Changed'] = (df['Request_Type'] == 'Retake - Changed Request').astype(int)
+    
     extended_time_correlations = df[['Extended_Time_Numeric', 'Num_Accommodations', 'NCBE_Sequence',
                                     'Is_Fully_Approved', 'Is_Partially_Approved', 'Is_Previously_Examined',
                                     'Is_New_Request', 'Is_Retake_Same', 'Is_Retake_Changed']].corr()['Extended_Time_Numeric'].drop('Extended_Time_Numeric')
-
+    
     fig10 = go.Figure()
     fig10.add_trace(go.Bar(
         x=extended_time_correlations.index,
@@ -218,7 +250,7 @@ with tabs[9]:
         text=[f'{x:.3f}' for x in extended_time_correlations.values],
         textposition='auto'
     ))
-
+    
     fig10.update_layout(
         title='Correlations with Extended Time Percentage',
         xaxis_title='Variables',
@@ -227,6 +259,7 @@ with tabs[9]:
         width=800,
         xaxis_tickangle=-45
     )
+    
     fig10.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
 
     st.plotly_chart(fig10, use_container_width=True)
