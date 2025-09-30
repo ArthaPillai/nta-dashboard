@@ -42,7 +42,7 @@ tabs = st.tabs([
     "Request Types", "Extended Time by Law School", "Extended Time Distribution",
     "Top Diagnoses", "Requests by Law School", "Approval by Request Type",
     "Approval Distribution", "Extended Time Distribution by Law School",
-    "Extended Time vs Approval", "Correlations with Extended Time", "Comprehensive Stats"
+    "Extended Time vs Approval", "Correlations with Extended Time", "Correlation Matrix"
 ])
 
 # 1. Request Types
@@ -206,34 +206,68 @@ with tabs[8]:
 
 # 10. Correlations with Extended Time
 with tabs[9]:
-    df['Extended_Time_Numeric'] = df['Requested_Accommodations'].apply(extract_extended_time)
-    df['Is_Fully_Approved'] = (df['Approved?'] == 'Appv.').astype(int)
-    df['Is_Partially_Approved'] = (df['Approved?'] == 'Appv. Part').astype(int)
-    df['Is_Previously_Examined'] = (df['Approved?'] == 'Prev. Exam').astype(int)
-    df['Is_New_Request'] = (df['Request_Type'] == 'New Request').astype(int)
-    df['Is_Retake_Same'] = (df['Request_Type'] == 'Retake - Same Request').astype(int)
-    df['Is_Retake_Changed'] = (df['Request_Type'] == 'Retake - Changed Request').astype(int)
+    extended_time_correlations = df[['Extended_Time_Numeric', 'Num_Accommodations', 'NCBE_Sequence',
+                                    'Is_Fully_Approved', 'Is_Partially_Approved', 'Is_Previously_Examined',
+                                    'Is_New_Request', 'Is_Retake_Same', 'Is_Retake_Changed']].corr()['Extended_Time_Numeric'].drop('Extended_Time_Numeric')
 
-    extended_time_correlations = df[['Extended_Time_Numeric', 'Is_Fully_Approved', 'Is_Partially_Approved',
-                                     'Is_Previously_Examined', 'Is_New_Request', 'Is_Retake_Same', 'Is_Retake_Changed']].corr()['Extended_Time_Numeric']
-
-    fig10 = px.bar(
+    fig10 = go.Figure()
+    fig10.add_trace(go.Bar(
         x=extended_time_correlations.index,
         y=extended_time_correlations.values,
-        title="Correlations with Extended Time Percentage",
-        labels={'x': 'Variables', 'y': 'Correlation'}
+        marker_color=['red' if x < 0 else 'blue' for x in extended_time_correlations.values],
+        text=[f'{x:.3f}' for x in extended_time_correlations.values],
+        textposition='auto'
+    ))
+
+    fig10.update_layout(
+        title='Correlations with Extended Time Percentage',
+        xaxis_title='Variables',
+        yaxis_title='Correlation Coefficient',
+        height=500,
+        width=800,
+        xaxis_tickangle=-45
     )
+    fig10.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
+
     st.plotly_chart(fig10, use_container_width=True)
 
 # 11. Correlation Matrix
 with tabs[10]:
-    st.header("Correlation Matrix")
-    corr = df.corr(numeric_only=True)
+    df_clean = df.copy()
+    df_clean['Extended_Time'] = df_clean['Requested_Accommodations'].str.contains('Extended Time', na=False).astype(int)
+    df_clean['Laptop'] = df_clean['Requested_Accommodations'].str.contains('Laptop', na=False).astype(int)
+    df_clean['Reduced_Distraction'] = df_clean['Requested_Accommodations'].str.contains('Reduced distraction', na=False).astype(int)
+    df_clean['OTC_Breaks'] = df_clean['Requested_Accommodations'].str.contains('OTC', na=False).astype(int)
+    df_clean['Large_Print'] = df_clean['Requested_Accommodations'].str.contains('Large Print|18 pt|24 pt', na=False).astype(int)
+    df_clean['Medication'] = df_clean['Requested_Accommodations'].str.contains('Medication|Medicine', na=False).astype(int)
 
-    fig_corr = px.imshow(
-        corr,
-        text_auto=True,
-        color_continuous_scale="RdBu_r",
-        title="Correlation Heatmap"
+    df_clean['ADHD'] = df_clean['Diagnosis'].str.contains('ADHD', na=False).astype(int)
+    df_clean['Anxiety'] = df_clean['Diagnosis'].str.contains('Anxiety', na=False).astype(int)
+    df_clean['Depression'] = df_clean['Diagnosis'].str.contains('Depression', na=False).astype(int)
+    df_clean['Physical_Condition'] = df_clean['Diagnosis'].str.contains('Glaucoma|Carpal Tunnel|Vertigo|Polyneuropathy|Osteoarthritis', na=False).astype(int)
+
+    df_clean['Retake_Request'] = df_clean['Request_Type'].str.contains('Retake', na=False).astype(int)
+    df_clean['Approved'] = df_clean['Approved?'].str.contains('Appv', na=False).astype(int)
+
+    correlation_columns = ['Extended_Time', 'Laptop', 'Reduced_Distraction', 'OTC_Breaks', 
+                          'Large_Print', 'Medication', 'ADHD', 'Anxiety', 'Depression', 
+                          'Physical_Condition', 'Retake_Request', 'Approved']
+
+    correlation_matrix = df_clean[correlation_columns].corr()
+
+    fig11 = px.imshow(correlation_matrix,
+                    text_auto=True,  
+                    aspect="auto", 
+                    color_continuous_scale='RdBu',
+                    title='Correlation Heatmap of Accommodations, Diagnoses, Request Type, and Approval')
+
+    fig11.update_layout(
+        xaxis_title="Variables",
+        yaxis_title="Variables",
+        coloraxis_colorbar_title="Correlation",
+        height=800, 
+        width=1000, 
+        margin=dict(l=50, r=50, t=100, b=50) 
     )
-    st.plotly_chart(fig_corr, use_container_width=True)
+
+    st.plotly_chart(fig11, use_container_width=True)
