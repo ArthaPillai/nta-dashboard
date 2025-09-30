@@ -225,22 +225,15 @@ with tabs[9]:
     )
     st.plotly_chart(fig10, use_container_width=True)
 
-# 11. Comprehensive Stats
+# 11. Correlation Matrix
 with tabs[10]:
-    df_with_extended_time = df[df['Extended_Time_Percent'].notna()].copy()
-    law_school_comprehensive = df_with_extended_time.groupby('Law_School').agg({
-        'Extended_Time_Percent': ['mean', 'median', 'std', 'min', 'max'],
-        'Approved?': [
-            lambda x: (x == 'Appv.').sum(),
-            lambda x: (x == 'Appv. Part').sum(),
-            lambda x: (x.isin(['Appv.', 'Appv. Part'])).sum() / len(x) * 100,
-            'count'
-        ]
-    }).round(2)
+    st.header("Correlation Matrix")
+    corr = df.corr(numeric_only=True)
 
-    law_school_comprehensive.columns = [
-        'Avg_Extended_Time', 'Median_Extended_Time', 'Std_Extended_Time', 'Min_Extended_Time', 'Max_Extended_Time',
-        'Full_Approvals', 'Partial_Approvals', 'Total_Approval_Rate', 'Total_Requests'
-    ]
-    summary_table = law_school_comprehensive.reset_index()
-    st.dataframe(summary_table)
+    fig_corr = px.imshow(
+        corr,
+        text_auto=True,
+        color_continuous_scale="RdBu_r",
+        title="Correlation Heatmap"
+    )
+    st.plotly_chart(fig_corr, use_container_width=True)
